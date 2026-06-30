@@ -1,0 +1,43 @@
+name: Sync Fork with Upstream (JotaDev66)
+
+# Keeps williamprado/WaCalls in sync with the upstream JotaDev66/WaCalls.
+# Runs on a schedule and can be triggered manually. Merges upstream/main into
+# main using a regular merge (so the fork can carry its own commits, e.g. this
+# workflow file, without the sync failing on a non-fast-forward).
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch: {}      # allow manual run from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/JotaDev66/WaCalls.git || git remote set-url upstream https://github.com/JotaDev66/WaCalls.git
+          git fetch upstream main
+
+      - name: Merge upstream/main into main
+        run: |
+          git merge --no-edit upstream/main
+
+      - name: Push updated main
+        run: |
+          git push origin main
