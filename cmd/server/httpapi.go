@@ -34,13 +34,36 @@ func (s *server) routes() http.Handler {
 			mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 		}
 	}
-	return withCORS(mux)
+	return withCORS(withAuth(mux))
+}
+
+// withAuth guards every request with an API key (header X-API-Key or query
+// ?token=) when WACALLS_API_KEY is set. Empty key = no auth (LAN/dev only).
+// The static assets and CORS preflight are always allowed so the panel loads
+// and can then send the key on API calls.
+func withAuth(h http.Handler) http.Handler {
+	key := os.Getenv("WACALLS_API_KEY")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key == "" || r.Method == http.MethodOptions || !strings.HasPrefix(r.URL.Path, "/api/") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		provided := r.Header.Get("X-API-Key")
+		if provided == "" {
+			provided = r.URL.Query().Get("token")
+		}
+		if provided != key {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id, X-API-Key")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
