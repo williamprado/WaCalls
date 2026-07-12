@@ -23,13 +23,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /wacalls ./c
 
 # ---------- Stage 3: runtime mínimo ----------
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates wget \
-    && adduser -D -u 10001 app \
-    && mkdir -p /data && chown app /data
+RUN apk add --no-cache ca-certificates wget && mkdir -p /data
 WORKDIR /app
 COPY --from=server /wacalls /app/wacalls
 COPY --from=client /app/client/dist /app/client/dist
-USER app
+# Roda como root: o SQLite grava num volume nomeado (root-owned no Swarm) e este
+# serviço é interno (host network, protegido por API key + Traefik).
 VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
