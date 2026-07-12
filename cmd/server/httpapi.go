@@ -196,8 +196,15 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 	}
 	owner := clientID(r)
 	if other := s.broker.ownerActiveCall(owner); other != "" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
-		return
+		// Auto-encerra a chamada anterior pendurada deste operador e segue com a
+		// nova (substitui em vez de recusar). Evita o bloqueio "operator already
+		// on a call" quando uma chamada nao foi encerrada corretamente (aba
+		// fechada, destino nao atendeu, WebRTC caiu, etc.).
+		if ac, ok := sess.reg.get(other); ok {
+			_ = ac.cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
+		}
+		sess.removeCall(other)
+		s.broker.endCall(other, string(core.EndCallReasonUserEnded))
 	}
 	if max := s.sessions.maxCalls; max > 0 && sess.reg.count() >= max {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
